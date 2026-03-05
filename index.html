@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Viewer Pro - Multi Sheet</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #217346;
+            --bg-color: #f0f2f5;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .container {
+            width: 95%; max-width: 1300px;
+            background: white; padding: 25px;
+            border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+        }
+
+        .controls {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;
+        }
+
+        /* Tabs Styling */
+        .tabs-container {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #dee2e6;
+            overflow-x: auto;
+        }
+
+        .tab-button {
+            padding: 8px 20px;
+            border: none;
+            background: #e9ecef;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            font-weight: 600;
+            color: #555;
+            white-space: nowrap;
+        }
+
+        .tab-button.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .custom-file-upload {
+            background: var(--primary-color);
+            color: white; padding: 10px 20px;
+            border-radius: 8px; cursor: pointer; font-weight: 600;
+        }
+
+        #search-input {
+            padding: 10px 15px; width: 300px;
+            border: 2px solid #ddd; border-radius: 8px; outline: none;
+        }
+
+        .table-container {
+            overflow-x: auto; border-radius: 8px;
+            border: 1px solid #eee; max-height: 500px;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { background: #f8f9fa; padding: 12px; border-bottom: 2px solid #dee2e6; position: sticky; top: 0; }
+        td { padding: 10px; border-bottom: 1px solid #eee; }
+        tr:hover { background-color: #f1f8f4; }
+        
+        .no-data { text-align: center; padding: 40px; color: #999; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="color: var(--primary-color); margin:0;">Excel Multi-Sheet Viewer</h1>
+        <p>Buka file Excel dan pindah antar sheet dengan mudah.</p>
+    </div>
+
+    <div class="controls">
+        <div>
+            <label for="file-upload" class="custom-file-upload">📁 Pilih File</label>
+            <input id="file-upload" type="file" accept=".xlsx, .xls" onchange="handleFile(event)" style="display:none;"/>
+            <span id="file-name" style="margin-left: 10px; color: #777;">Tidak ada file</span>
+        </div>
+        <input type="text" id="search-input" placeholder="Cari data di sheet ini..." onkeyup="filterTable()" disabled>
+    </div>
+
+    <div id="tabs-container" class="tabs-container"></div>
+
+    <div class="table-container" id="table-output">
+        <div class="no-data">Silahkan pilih file Excel terlebih dahulu.</div>
+    </div>
+</div>
+
+<script>
+    let wb; // Menyimpan objek workbook secara global
+
+    function handleFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('search-input').disabled = false;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            wb = XLSX.read(data, { type: 'array' });
+            
+            // 1. Buat tombol tab untuk setiap sheet
+            renderTabs(wb.SheetNames);
+            
+            // 2. Tampilkan sheet pertama secara default
+            loadSheet(wb.SheetNames[0]);
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function renderTabs(sheetNames) {
+        const tabsContainer = document.getElementById('tabs-container');
+        tabsContainer.innerHTML = ''; // Reset tabs
+
+        sheetNames.forEach((name, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-button' + (index === 0 ? ' active' : '');
+            btn.textContent = name;
+            btn.onclick = () => {
+                // Hapus class active dari tombol lain
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadSheet(name);
+            };
+            tabsContainer.appendChild(btn);
+        });
+    }
+
+    function loadSheet(sheetName) {
+        const worksheet = wb.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        displayTable(jsonData);
+    }
+
+    function displayTable(dataRows) {
+        if (!dataRows || dataRows.length === 0) {
+            document.getElementById('table-output').innerHTML = '<div class="no-data">Sheet ini kosong.</div>';
+            return;
+        }
+
+        let html = '<table><thead><tr>';
+        
+        // Header
+        const headers = dataRows[0];
+        headers.forEach(h => html += `<th>${h || ''}</th>`);
+        html += '</tr></thead><tbody>';
+
+        // Body
+        for (let i = 1; i < dataRows.length; i++) {
+            html += '<tr>';
+            dataRows[i].forEach(cell => {
+                html += `<td>${cell !== undefined ? cell : ''}</td>`;
+            });
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+
+        document.getElementById('table-output').innerHTML = html;
+        document.getElementById('search-input').value = ''; // Reset pencarian saat ganti sheet
+    }
+
+    function filterTable() {
+        const input = document.getElementById('search-input').value.toLowerCase();
+        const rows = document.querySelectorAll('#table-output tbody tr');
+
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(input) ? "" : "none";
+        });
+    }
+</script>
+
+</body>
+</html>
