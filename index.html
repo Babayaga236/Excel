@@ -9,10 +9,11 @@
         :root {
             --primary-color: #217346;
             --bg-color: #f0f2f5;
+            --accent-color: #e9ecef;
         }
 
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
             margin: 0; padding: 20px;
             display: flex; flex-direction: column; align-items: center;
@@ -29,35 +30,28 @@
             align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;
         }
 
-        /* Tabs Styling */
         .tabs-container {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 15px;
+            display: flex; gap: 5px; margin-bottom: 15px;
             border-bottom: 2px solid #dee2e6;
-            overflow-x: auto;
+            overflow-x: auto; padding-bottom: 5px;
         }
+
+        /* Scrollbar halus untuk tab */
+        .tabs-container::-webkit-scrollbar { height: 6px; }
+        .tabs-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 
         .tab-button {
-            padding: 8px 20px;
-            border: none;
-            background: #e9ecef;
-            cursor: pointer;
-            border-radius: 8px 8px 0 0;
-            font-weight: 600;
-            color: #555;
-            white-space: nowrap;
+            padding: 10px 20px; border: none; background: var(--accent-color);
+            cursor: pointer; border-radius: 8px 8px 0 0;
+            font-weight: 600; color: #555; white-space: nowrap; transition: 0.3s;
         }
 
-        .tab-button.active {
-            background: var(--primary-color);
-            color: white;
-        }
+        .tab-button.active { background: var(--primary-color); color: white; }
+        .tab-button:hover:not(.active) { background: #ddd; }
 
         .custom-file-upload {
-            background: var(--primary-color);
-            color: white; padding: 10px 20px;
-            border-radius: 8px; cursor: pointer; font-weight: 600;
+            background: var(--primary-color); color: white; padding: 10px 20px;
+            border-radius: 8px; cursor: pointer; font-weight: 600; display: inline-block;
         }
 
         #search-input {
@@ -67,15 +61,22 @@
 
         .table-container {
             overflow-x: auto; border-radius: 8px;
-            border: 1px solid #eee; max-height: 500px;
+            border: 1px solid #eee; max-height: 550px; position: relative;
         }
 
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { background: #f8f9fa; padding: 12px; border-bottom: 2px solid #dee2e6; position: sticky; top: 0; }
+        th { 
+            background: #f8f9fa; padding: 12px; 
+            border-bottom: 2px solid #dee2e6; 
+            position: sticky; top: 0; z-index: 10;
+        }
         td { padding: 10px; border-bottom: 1px solid #eee; }
         tr:hover { background-color: #f1f8f4; }
         
         .no-data { text-align: center; padding: 40px; color: #999; }
+        
+        /* Loading Overlay */
+        #loader { display: none; color: var(--primary-color); font-weight: bold; }
     </style>
 </head>
 <body>
@@ -88,9 +89,10 @@
 
     <div class="controls">
         <div>
-            <label for="file-upload" class="custom-file-upload">📁 Pilih File</label>
+            <label for="file-upload" class="custom-file-upload">📁 Pilih File Excel</label>
             <input id="file-upload" type="file" accept=".xlsx, .xls" onchange="handleFile(event)" style="display:none;"/>
-            <span id="file-name" style="margin-left: 10px; color: #777;">Tidak ada file</span>
+            <span id="file-name" style="margin-left: 10px; color: #777;">Tidak ada file dipilih</span>
+            <span id="loader"> Menampilkan data...</span>
         </div>
         <input type="text" id="search-input" placeholder="Cari data di sheet ini..." onkeyup="filterTable()" disabled>
     </div>
@@ -103,39 +105,43 @@
 </div>
 
 <script>
-    let wb; // Menyimpan objek workbook secara global
+    let wb; 
 
     function handleFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
         document.getElementById('file-name').textContent = file.name;
-        document.getElementById('search-input').disabled = false;
-
+        document.getElementById('loader').style.display = 'inline';
+        
         const reader = new FileReader();
         reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            wb = XLSX.read(data, { type: 'array' });
-            
-            // 1. Buat tombol tab untuk setiap sheet
-            renderTabs(wb.SheetNames);
-            
-            // 2. Tampilkan sheet pertama secara default
-            loadSheet(wb.SheetNames[0]);
+            try {
+                const data = new Uint8Array(e.target.result);
+                wb = XLSX.read(data, { type: 'array' });
+                
+                renderTabs(wb.SheetNames);
+                loadSheet(wb.SheetNames[0]);
+                
+                document.getElementById('search-input').disabled = false;
+            } catch (err) {
+                alert("Gagal membaca file. Pastikan file adalah format Excel yang valid.");
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
         };
         reader.readAsArrayBuffer(file);
     }
 
     function renderTabs(sheetNames) {
         const tabsContainer = document.getElementById('tabs-container');
-        tabsContainer.innerHTML = ''; // Reset tabs
+        tabsContainer.innerHTML = ''; 
 
         sheetNames.forEach((name, index) => {
             const btn = document.createElement('button');
             btn.className = 'tab-button' + (index === 0 ? ' active' : '');
             btn.textContent = name;
             btn.onclick = () => {
-                // Hapus class active dari tombol lain
                 document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 loadSheet(name);
@@ -146,35 +152,50 @@
 
     function loadSheet(sheetName) {
         const worksheet = wb.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        // header: 1 menghasilkan array dari array
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
         displayTable(jsonData);
     }
 
+    function escapeHtml(text) {
+        if (typeof text !== 'string') return text;
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     function displayTable(dataRows) {
+        const output = document.getElementById('table-output');
         if (!dataRows || dataRows.length === 0) {
-            document.getElementById('table-output').innerHTML = '<div class="no-data">Sheet ini kosong.</div>';
+            output.innerHTML = '<div class="no-data">Sheet ini kosong.</div>';
             return;
         }
 
         let html = '<table><thead><tr>';
         
-        // Header
+        // Ambil jumlah kolom maksimal agar baris tidak pincang
+        const maxCols = Math.max(...dataRows.map(row => row.length));
+        
+        // Header (Baris pertama)
         const headers = dataRows[0];
-        headers.forEach(h => html += `<th>${h || ''}</th>`);
+        for (let j = 0; j < maxCols; j++) {
+            html += `<th>${escapeHtml(headers[j]) || ''}</th>`;
+        }
         html += '</tr></thead><tbody>';
 
-        // Body
+        // Body (Baris kedua dst)
         for (let i = 1; i < dataRows.length; i++) {
             html += '<tr>';
-            dataRows[i].forEach(cell => {
-                html += `<td>${cell !== undefined ? cell : ''}</td>`;
-            });
+            for (let j = 0; j < maxCols; j++) {
+                const cellValue = dataRows[i][j];
+                html += `<td>${cellValue !== undefined ? escapeHtml(cellValue) : ''}</td>`;
+            }
             html += '</tr>';
         }
         html += '</tbody></table>';
 
-        document.getElementById('table-output').innerHTML = html;
-        document.getElementById('search-input').value = ''; // Reset pencarian saat ganti sheet
+        output.innerHTML = html;
+        document.getElementById('search-input').value = ''; 
     }
 
     function filterTable() {
