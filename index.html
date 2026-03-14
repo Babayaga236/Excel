@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel Viewer Pro - Multi Sheet</title>
+    <title>Excel Viewer Pro - Multi Sheet & Select</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary-color: #217346;
+            --secondary-color: #0078d4;
             --bg-color: #f0f2f5;
-            --accent-color: #e9ecef;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background-color: var(--bg-color);
             margin: 0; padding: 20px;
             display: flex; flex-direction: column; align-items: center;
@@ -23,6 +23,7 @@
             width: 95%; max-width: 1300px;
             background: white; padding: 25px;
             border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
         }
 
         .controls {
@@ -32,27 +33,25 @@
 
         .tabs-container {
             display: flex; gap: 5px; margin-bottom: 15px;
-            border-bottom: 2px solid #dee2e6;
-            overflow-x: auto; padding-bottom: 5px;
+            border-bottom: 2px solid #dee2e6; overflow-x: auto;
         }
 
-        /* Scrollbar halus untuk tab */
-        .tabs-container::-webkit-scrollbar { height: 6px; }
-        .tabs-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
-
         .tab-button {
-            padding: 10px 20px; border: none; background: var(--accent-color);
+            padding: 8px 20px; border: none; background: #e9ecef;
             cursor: pointer; border-radius: 8px 8px 0 0;
-            font-weight: 600; color: #555; white-space: nowrap; transition: 0.3s;
+            font-weight: 600; color: #555; white-space: nowrap;
         }
 
         .tab-button.active { background: var(--primary-color); color: white; }
-        .tab-button:hover:not(.active) { background: #ddd; }
 
-        .custom-file-upload {
-            background: var(--primary-color); color: white; padding: 10px 20px;
-            border-radius: 8px; cursor: pointer; font-weight: 600; display: inline-block;
+        .btn {
+            padding: 10px 20px; border-radius: 8px; cursor: pointer; 
+            font-weight: 600; border: none; transition: 0.3s;
         }
+
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-secondary { background: var(--secondary-color); color: white; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
 
         #search-input {
             padding: 10px 15px; width: 300px;
@@ -61,82 +60,76 @@
 
         .table-container {
             overflow-x: auto; border-radius: 8px;
-            border: 1px solid #eee; max-height: 550px; position: relative;
+            border: 1px solid #eee; max-height: 400px;
         }
 
         table { width: 100%; border-collapse: collapse; font-size: 14px; }
-        th { 
-            background: #f8f9fa; padding: 12px; 
-            border-bottom: 2px solid #dee2e6; 
-            position: sticky; top: 0; z-index: 10;
-        }
+        th { background: #f8f9fa; padding: 12px; border-bottom: 2px solid #dee2e6; position: sticky; top: 0; z-index: 5; }
         td { padding: 10px; border-bottom: 1px solid #eee; }
         tr:hover { background-color: #f1f8f4; }
         
-        .no-data { text-align: center; padding: 40px; color: #999; }
+        .selected-section { margin-top: 40px; border-top: 3px solid var(--secondary-color); padding-top: 20px; }
+        .no-data { text-align: center; padding: 20px; color: #999; }
         
-        /* Loading Overlay */
-        #loader { display: none; color: var(--primary-color); font-weight: bold; }
+        /* Checkbox styling */
+        .row-checkbox { transform: scale(1.2); cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div style="text-align: center; margin-bottom: 20px;">
-        <h1 style="color: var(--primary-color); margin:0;">Excel Multi-Sheet Viewer</h1>
-        <p>Buka file Excel dan pindah antar sheet dengan mudah.</p>
-    </div>
-
+    <h1 style="color: var(--primary-color); text-align: center;">Excel Data Selector</h1>
+    
     <div class="controls">
         <div>
-            <label for="file-upload" class="custom-file-upload">📁 Pilih File Excel</label>
+            <label for="file-upload" class="btn btn-primary">📁 Pilih File</label>
             <input id="file-upload" type="file" accept=".xlsx, .xls" onchange="handleFile(event)" style="display:none;"/>
-            <span id="file-name" style="margin-left: 10px; color: #777;">Tidak ada file dipilih</span>
-            <span id="loader"> Menampilkan data...</span>
+            <span id="file-name" style="margin-left: 10px; color: #777;">Tidak ada file</span>
         </div>
-        <input type="text" id="search-input" placeholder="Cari data di sheet ini..." onkeyup="filterTable()" disabled>
+        <input type="text" id="search-input" placeholder="Cari di sheet ini..." onkeyup="filterTable()" disabled>
     </div>
 
     <div id="tabs-container" class="tabs-container"></div>
 
     <div class="table-container" id="table-output">
-        <div class="no-data">Silahkan pilih file Excel terlebih dahulu.</div>
+        <div class="no-data">Data utama akan muncul di sini.</div>
     </div>
+
+    <div style="margin-top: 20px; text-align: right;">
+        <button id="process-btn" class="btn btn-secondary" onclick="separateSelected()" disabled>➡️ Pisahkan Data Terpilih</button>
+    </div>
+</div>
+
+<div class="container selected-section" id="result-section" style="display: none;">
+    <h2 style="color: var(--secondary-color);">📋 Data Terpisah</h2>
+    <div class="table-container" id="selected-table-output"></div>
 </div>
 
 <script>
     let wb; 
+    let currentData = []; // Menyimpan data baris dari sheet aktif
 
     function handleFile(event) {
         const file = event.target.files[0];
         if (!file) return;
 
         document.getElementById('file-name').textContent = file.name;
-        document.getElementById('loader').style.display = 'inline';
-        
+        document.getElementById('search-input').disabled = false;
+        document.getElementById('process-btn').disabled = false;
+
         const reader = new FileReader();
         reader.onload = function(e) {
-            try {
-                const data = new Uint8Array(e.target.result);
-                wb = XLSX.read(data, { type: 'array' });
-                
-                renderTabs(wb.SheetNames);
-                loadSheet(wb.SheetNames[0]);
-                
-                document.getElementById('search-input').disabled = false;
-            } catch (err) {
-                alert("Gagal membaca file. Pastikan file adalah format Excel yang valid.");
-            } finally {
-                document.getElementById('loader').style.display = 'none';
-            }
+            const data = new Uint8Array(e.target.result);
+            wb = XLSX.read(data, { type: 'array' });
+            renderTabs(wb.SheetNames);
+            loadSheet(wb.SheetNames[0]);
         };
         reader.readAsArrayBuffer(file);
     }
 
     function renderTabs(sheetNames) {
         const tabsContainer = document.getElementById('tabs-container');
-        tabsContainer.innerHTML = ''; 
-
+        tabsContainer.innerHTML = '';
         sheetNames.forEach((name, index) => {
             const btn = document.createElement('button');
             btn.className = 'tab-button' + (index === 0 ? ' active' : '');
@@ -152,56 +145,88 @@
 
     function loadSheet(sheetName) {
         const worksheet = wb.Sheets[sheetName];
-        // header: 1 menghasilkan array dari array
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-        displayTable(jsonData);
-    }
-
-    function escapeHtml(text) {
-        if (typeof text !== 'string') return text;
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+        currentData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        displayTable(currentData);
     }
 
     function displayTable(dataRows) {
-        const output = document.getElementById('table-output');
+        const container = document.getElementById('table-output');
         if (!dataRows || dataRows.length === 0) {
-            output.innerHTML = '<div class="no-data">Sheet ini kosong.</div>';
+            container.innerHTML = '<div class="no-data">Sheet kosong.</div>';
             return;
         }
 
         let html = '<table><thead><tr>';
+        html += '<th><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>'; // Header Checkbox
         
-        // Ambil jumlah kolom maksimal agar baris tidak pincang
-        const maxCols = Math.max(...dataRows.map(row => row.length));
-        
-        // Header (Baris pertama)
         const headers = dataRows[0];
-        for (let j = 0; j < maxCols; j++) {
-            html += `<th>${escapeHtml(headers[j]) || ''}</th>`;
-        }
+        headers.forEach(h => html += `<th>${h || ''}</th>`);
         html += '</tr></thead><tbody>';
 
-        // Body (Baris kedua dst)
         for (let i = 1; i < dataRows.length; i++) {
-            html += '<tr>';
-            for (let j = 0; j < maxCols; j++) {
-                const cellValue = dataRows[i][j];
-                html += `<td>${cellValue !== undefined ? escapeHtml(cellValue) : ''}</td>`;
-            }
+            html += `<tr data-index="${i}">`;
+            html += `<td><input type="checkbox" class="row-checkbox"></td>`;
+            dataRows[i].forEach(cell => {
+                html += `<td>${cell}</td>`;
+            });
             html += '</tr>';
         }
         html += '</tbody></table>';
+        container.innerHTML = html;
+    }
 
-        output.innerHTML = html;
-        document.getElementById('search-input').value = ''; 
+    function toggleAll(master) {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => cb.checked = master.checked);
+    }
+
+    function separateSelected() {
+        const selectedRows = [];
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        
+        // Ambil header
+        const headers = currentData[0];
+        
+        checkboxes.forEach((cb, index) => {
+            if (cb.checked) {
+                // index + 1 karena baris data mulai dari index 1 (0 adalah header)
+                selectedRows.push(currentData[index + 1]);
+            }
+        });
+
+        if (selectedRows.length === 0) {
+            alert("Pilih setidaknya satu baris!");
+            return;
+        }
+
+        renderSelectedTable(headers, selectedRows);
+    }
+
+    function renderSelectedTable(headers, rows) {
+        const section = document.getElementById('result-section');
+        const container = document.getElementById('selected-table-output');
+        section.style.display = 'block';
+
+        let html = '<table><thead><tr>';
+        headers.forEach(h => html += `<th>${h || ''}</th>`);
+        html += '</tr></thead><tbody>';
+
+        rows.forEach(row => {
+            html += '<tr>';
+            row.forEach(cell => html += `<td>${cell}</td>`);
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        
+        // Auto-scroll ke hasil
+        section.scrollIntoView({ behavior: 'smooth' });
     }
 
     function filterTable() {
         const input = document.getElementById('search-input').value.toLowerCase();
         const rows = document.querySelectorAll('#table-output tbody tr');
-
         rows.forEach(row => {
             const text = row.textContent.toLowerCase();
             row.style.display = text.includes(input) ? "" : "none";
