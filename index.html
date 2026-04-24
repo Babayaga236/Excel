@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Viewer Pro v2.0 - Multi Sheet & Export</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #217346;
+            --secondary-color: #0078d4;
+            --accent-color: #d83b01;
+            --danger-color: #dc3545; 
+            --bg-color: #f0f2f5;
+            --container-bg: #ffffff;
+            --text-color: #333333;
+            --border-color: #dee2e6;
+            --table-hover: #f1f8f4;
+            --th-bg: #f8f9fa;
+        }
+
+        body.dark-mode {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --border-color: #333333;
+            --table-hover: #2a3b32;
+            --th-bg: #2d2d2d;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            width: 95%; max-width: 1300px;
+            background: var(--container-bg); padding: 25px;
+            border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            margin-bottom: 30px; transition: background-color 0.3s;
+        }
+
+        .header-main {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex; justify-content: space-between;
+            align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 20px;
+        }
+
+        .tabs-container {
+            display: flex; gap: 5px; margin-bottom: 15px;
+            border-bottom: 2px solid var(--border-color); overflow-x: auto;
+            padding-bottom: 5px;
+        }
+
+        .tab-button {
+            padding: 10px 20px; border: none; background: var(--th-bg);
+            cursor: pointer; border-radius: 8px 8px 0 0;
+            font-weight: 600; color: var(--text-color); white-space: nowrap;
+            transition: 0.2s; border: 1px solid transparent;
+        }
+
+        .tab-button:hover { background: var(--border-color); }
+        .tab-button.active { background: var(--primary-color); color: white; }
+
+        .btn {
+            padding: 10px 20px; border-radius: 8px; cursor: pointer; 
+            font-weight: 600; border: none; transition: 0.3s;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-secondary { background: var(--secondary-color); color: white; }
+        .btn-accent { background: var(--accent-color); color: white; }
+        .btn-danger { background: var(--danger-color); color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-dark { background: #333; color: white; border: 1px solid #555; }
+        body.dark-mode .btn-dark { background: #f0f2f5; color: #333; }
+        
+        .btn:disabled { background: #ccc; cursor: not-allowed; color: #666; }
+
+        #search-input {
+            padding: 10px 15px; width: 300px;
+            border: 2px solid var(--border-color); border-radius: 8px; outline: none;
+            background: var(--container-bg); color: var(--text-color);
+        }
+
+        .table-container {
+            overflow-x: auto; border-radius: 8px;
+            border: 1px solid var(--border-color); max-height: 500px;
+        }
+
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { 
+            background: var(--th-bg); padding: 12px; 
+            border-bottom: 2px solid var(--border-color); 
+            position: sticky; top: 0; z-index: 5;
+            text-align: left; cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        th:hover { background-color: var(--border-color); }
+        td { padding: 10px; border-bottom: 1px solid var(--border-color); }
+        tr:hover td { background-color: var(--table-hover); }
+        
+        .selected-section { 
+            margin-top: 40px; 
+            border-top: 4px solid var(--secondary-color); 
+            padding-top: 20px; 
+        }
+
+        .header-flex {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; flex-wrap: wrap; gap: 10px;
+        }
+        
+        .no-data { text-align: center; padding: 40px; color: #999; font-style: italic; }
+        .row-checkbox { transform: scale(1.2); cursor: pointer; }
+        .summary-text { font-size: 13px; color: #888; margin-top: 10px; }
+        .sort-icon { font-size: 10px; margin-left: 5px; opacity: 0.5; }
+        .text-right { text-align: right; } 
+
+        tbody { counter-reset: rowNumber; }
+        tr.row-item:not([style*="display: none"]) { counter-increment: rowNumber; }
+        td.auto-num::before { content: counter(rowNumber); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-main">
+        <h1 style="color: var(--primary-color); margin: 0;">Excel Viewer Pro</h1>
+        <button class="btn btn-dark" onclick="toggleDarkMode()">🌓 Mode Gelap</button>
+    </div>
+    
+    <div class="controls">
+        <div>
+            <label for="file-upload" class="btn btn-primary">📁 Pilih File Excel</label>
+            <input id="file-upload" type="file" accept=".xlsx, .xls" onchange="handleFile(event)" style="display:none;"/>
+            <span id="file-name" style="margin-left: 10px; font-weight: bold;">Tidak ada file terpilih</span>
+        </div>
+        <input type="text" id="search-input" placeholder="🔍 Cari data di sheet ini..." onkeyup="filterTable()" disabled>
+    </div>
+
+    <div id="tabs-container" class="tabs-container"></div>
+
+    <div class="table-container" id="table-output">
+        <div class="no-data">Silakan upload file Excel untuk melihat data.</div>
+    </div>
+    <div class="summary-text" id="data-summary">Total Baris: 0</div>
+
+    <div style="margin-top: 20px; text-align: right;">
+        <button id="process-btn" class="btn btn-secondary" onclick="separateSelected()" disabled>➡️ Pisahkan Data Terpilih</button>
+    </div>
+</div>
+
+<div class="container selected-section" id="result-section" style="display: none;">
+    <div class="header-flex">
+        <h2 style="color: var(--secondary-color); margin: 0;">📋 Data Terpisah</h2>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-dark" onclick="copyToClipboard()">📋 Copy Data</button>
+            <button class="btn btn-primary" onclick="exportToPDF()">📄 Download PDF</button>
+            <button class="btn btn-accent" onclick="exportToExcel()">📥 Download Excel</button>
+        </div>
+    </div>
+    <div class="table-container" id="selected-table-output"></div>
+</div>
+
+<script>
+    let wb; 
+    let currentData = []; 
+    let displayData = []; 
+    let lastSelectedHeaders = [];
+    let lastSelectedRows = [];
+    let sortDirection = 1; 
+    let currentSortCol = -1;
+    let skipColIndex = -1; // VARIABEL BARU: Menyimpan index kolom "No" asli untuk disembunyikan
+
+    const TARGET_RUPIAH_COLUMNS = ["harga air", "beban tetap", "denda", "total"];
+
+    function isRupiahColumn(headerName) {
+        if (!headerName) return false;
+        const name = headerName.toString().toLowerCase().trim();
+        return TARGET_RUPIAH_COLUMNS.includes(name); 
+    }
+
+    function formatRupiah(value) {
+        if (value === "" || value === null || value === undefined) return "";
+        let num = parseFloat(value);
+        if (isNaN(num)) return value; 
+        return new Intl.NumberFormat('id-ID', { 
+            style: 'currency', 
+            currency: 'IDR', 
+            minimumFractionDigits: 0 
+        }).format(num);
+    }
+
+    function toggleDarkMode() { document.body.classList.toggle('dark-mode'); }
+
+    function escapeHTML(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>'"]/g, 
+            tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+        );
+    }
+
+    function handleFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('search-input').disabled = false;
+        document.getElementById('search-input').value = '';
+        document.getElementById('process-btn').disabled = false;
+        document.getElementById('result-section').style.display = 'none';
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            wb = XLSX.read(data, { type: 'array' });
+            renderTabs(wb.SheetNames);
+            loadSheet(wb.SheetNames[0]);
+            
+            event.target.value = ''; 
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    function renderTabs(sheetNames) {
+        const tabsContainer = document.getElementById('tabs-container');
+        tabsContainer.innerHTML = '';
+        sheetNames.forEach((name, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'tab-button' + (index === 0 ? ' active' : '');
+            btn.textContent = name;
+            btn.onclick = () => {
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('search-input').value = '';
+                currentSortCol = -1; 
+                loadSheet(name);
+            };
+            tabsContainer.appendChild(btn);
+        });
+    }
+
+    function loadSheet(sheetName) {
+        const worksheet = wb.Sheets[sheetName];
+        currentData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+        displayData = [...currentData]; 
+        
+        // FITUR BARU: Deteksi otomatis kolom "No" bawaan dari Excel untuk disembunyikan
+        skipColIndex = -1;
+        if (displayData.length > 0) {
+            displayData[0].forEach((h, index) => {
+                let title = String(h).toLowerCase().trim();
+                if (["no", "no.", "nomor"].includes(title)) {
+                    skipColIndex = index;
+                }
+            });
+        }
+        
+        renderTableOutput();
+    }
+
+    function renderTableOutput() {
+        const container = document.getElementById('table-output');
+        const summary = document.getElementById('data-summary');
+        
+        if (!displayData || displayData.length <= 1) {
+            container.innerHTML = '<div class="no-data">Sheet ini kosong atau hanya berisi header.</div>';
+            summary.textContent = "Total Baris: 0";
+            return;
+        }
+
+        const headers = displayData[0];
+        let rupiahIndices = [];
+        headers.forEach((h, index) => {
+            if (isRupiahColumn(h)) rupiahIndices.push(index);
+        });
+
+        let html = '<table><thead><tr>';
+        html += '<th style="width: 40px;"><input type="checkbox" id="select-all" onclick="toggleAll(this)"></th>';
+        html += '<th style="width: 40px; text-align: center;">No.</th>';
+        html += '<th style="width: 60px;">Aksi</th>'; 
+        
+        headers.forEach((h, index) => {
+            if (index === skipColIndex) return; // Sembunyikan kolom "No" asli
+            let sortIcon = currentSortCol === index ? (sortDirection === 1 ? ' 🔼' : ' 🔽') : ' ↕️';
+            let extraClass = rupiahIndices.includes(index) ? 'class="text-right"' : '';
+            html += `<th onclick="sortTable(${index})" ${extraClass}>${escapeHTML(h)}${sortIcon}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        for (let i = 1; i < displayData.length; i++) {
+            html += `<tr class="row-item" data-id="${i}">`;
+            html += `<td><input type="checkbox" class="row-checkbox"></td>`;
+            html += `<td class="auto-num" style="text-align: center; font-weight: bold;"></td>`;
+            html += `<td><button class="btn btn-danger" style="padding: 5px 8px; font-size: 12px; border-radius: 4px;" title="Hapus Baris" onclick="deleteRow(${i})">🗑️</button></td>`;
+            
+            displayData[i].forEach((cell, cellIndex) => {
+                if (cellIndex === skipColIndex) return; // Sembunyikan sel "No" asli
+                let displayValue = cell;
+                let extraClass = '';
+                if (rupiahIndices.includes(cellIndex)) {
+                    displayValue = formatRupiah(cell);
+                    extraClass = 'class="text-right"'; 
+                }
+                html += `<td ${extraClass}>${escapeHTML(displayValue)}</td>`;
+            });
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        summary.textContent = `Menampilkan ${displayData.length - 1} baris data.`;
+    }
+
+    function deleteRow(index) {
+        if (confirm("Apakah Anda yakin ingin menghapus data ini?")) {
+            const rowToDelete = displayData[index];
+            displayData.splice(index, 1);
+            
+            const mainIndex = currentData.indexOf(rowToDelete);
+            if (mainIndex > -1) {
+                currentData.splice(mainIndex, 1);
+            }
+
+            renderTableOutput();
+            filterTable(); 
+        }
+    }
+
+    function sortTable(colIndex) {
+        if (displayData.length <= 1) return;
+
+        if (currentSortCol === colIndex) {
+            sortDirection *= -1; 
+        } else {
+            sortDirection = 1;
+            currentSortCol = colIndex;
+        }
+
+        const headers = displayData[0];
+        const rows = displayData.slice(1);
+
+        rows.sort((a, b) => {
+            let valA = a[colIndex] !== undefined ? a[colIndex].toString().toLowerCase() : '';
+            let valB = b[colIndex] !== undefined ? b[colIndex].toString().toLowerCase() : '';
+            
+            let numA = parseFloat(valA);
+            let numB = parseFloat(valB);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return (numA - numB) * sortDirection;
+            }
+
+            if (valA < valB) return -1 * sortDirection;
+            if (valA > valB) return 1 * sortDirection;
+            return 0;
+        });
+
+        displayData = [headers, ...rows];
+        renderTableOutput();
+        filterTable(); 
+        
+        const selectAllCheckbox = document.getElementById('select-all');
+        if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    }
+
+    function toggleAll(master) {
+        const rows = document.querySelectorAll('.row-item');
+        rows.forEach(row => {
+            if (row.style.display !== 'none') {
+                row.querySelector('.row-checkbox').checked = master.checked;
+            }
+        });
+    }
+
+    function filterTable() {
+        const input = document.getElementById('search-input').value.toLowerCase();
+        const rows = document.querySelectorAll('.row-item');
+        document.getElementById('select-all').checked = false;
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            if (text.includes(input)) {
+                row.style.display = "";
+                visibleCount++;
+            } else {
+                row.style.display = "none";
+                row.querySelector('.row-checkbox').checked = false; 
+            }
+        });
+        
+        document.getElementById('data-summary').textContent = `Ditemukan ${visibleCount} baris sesuai pencarian.`;
+    }
+
+    function separateSelected() {
+        lastSelectedHeaders = displayData[0];
+        lastSelectedRows = [];
+        
+        const rows = document.querySelectorAll('.row-item');
+        rows.forEach(row => {
+            const cb = row.querySelector('.row-checkbox');
+            if (cb.checked) {
+                const dataIndex = parseInt(row.getAttribute('data-id'));
+                lastSelectedRows.push(displayData[dataIndex]);
+            }
+        });
+
+        if (lastSelectedRows.length === 0) {
+            alert("Pilih setidaknya satu baris data!");
+            return;
+        }
+
+        renderSelectedTable(lastSelectedHeaders, lastSelectedRows);
+    }
+
+    function renderSelectedTable(headers, rows) {
+        const section = document.getElementById('result-section');
+        const container = document.getElementById('selected-table-output');
+        section.style.display = 'block';
+        
+        let rupiahIndices = [];
+        headers.forEach((h, index) => {
+            if (isRupiahColumn(h)) rupiahIndices.push(index);
+        });
+
+        let html = '<table><thead><tr>';
+        html += '<th style="width: 40px; text-align: center;">No.</th>'; 
+        headers.forEach((h, index) => {
+            if (index === skipColIndex) return; // Sembunyikan Header "No" Asli
+            let extraClass = rupiahIndices.includes(index) ? 'class="text-right"' : '';
+            html += `<th ${extraClass}>${escapeHTML(h)}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        let rowCount = 1;
+        rows.forEach(row => {
+            html += '<tr>';
+            html += `<td style="text-align: center; font-weight: bold;">${rowCount++}</td>`; 
+            row.forEach((cell, cellIndex) => {
+                if (cellIndex === skipColIndex) return; // Sembunyikan Data "No" Asli
+                let displayValue = cell;
+                let extraClass = '';
+                if (rupiahIndices.includes(cellIndex)) {
+                    displayValue = formatRupiah(cell);
+                    extraClass = 'class="text-right"';
+                }
+                html += `<td ${extraClass}>${escapeHTML(displayValue)}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        section.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function exportToExcel() {
+        if (lastSelectedRows.length === 0) return;
+        
+        let exportHeaders = ["No."];
+        lastSelectedHeaders.forEach((h, index) => {
+            if (index !== skipColIndex) exportHeaders.push(h); // Singkirkan "No" asli
+        });
+        
+        let exportRows = lastSelectedRows.map((row, index) => {
+            let newRow = [index + 1];
+            row.forEach((cell, cellIndex) => {
+                if (cellIndex !== skipColIndex) newRow.push(cell); // Singkirkan Data "No" asli
+            });
+            return newRow;
+        });
+        
+        const fullData = [exportHeaders, ...exportRows];
+        const ws = XLSX.utils.aoa_to_sheet(fullData);
+        const newWb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(newWb, ws, "Data Terpisah");
+        XLSX.writeFile(newWb, "Hasil_Data_Terpisah.xlsx");
+    }
+
+    function exportToPDF() {
+        if (lastSelectedRows.length === 0) return;
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4'); 
+        
+        let rupiahIndices = [];
+        lastSelectedHeaders.forEach((h, index) => {
+            if (isRupiahColumn(h)) rupiahIndices.push(index);
+        });
+
+        // 1. Buat Header PDF tanpa kolom No bawaan Excel
+        let pdfHeaders = ["No."];
+        lastSelectedHeaders.forEach((h, index) => {
+             if (index !== skipColIndex) pdfHeaders.push(String(h || ''));
+        });
+
+        // 2. Pemetaan posisi kolom setelah kolom "No" asli dihapus
+        let colMap = [];
+        let currentPdfCol = 1; 
+        lastSelectedHeaders.forEach((h, index) => {
+            if (index === skipColIndex) {
+                 colMap[index] = -1; // Kolom ini diabaikan
+            } else {
+                 colMap[index] = currentPdfCol++; 
+            }
+        });
+
+        // 3. Menghitung Total
+        let footerRow = new Array(pdfHeaders.length).fill(""); 
+        footerRow[0] = ""; 
+        if(pdfHeaders.length > 1) footerRow[1] = "TOTAL KESELURUHAN"; 
+        
+        rupiahIndices.forEach(colIndex => {
+            let sum = 0;
+            lastSelectedRows.forEach(row => {
+                let num = parseFloat(row[colIndex]);
+                if (!isNaN(num)) sum += num; 
+            });
+            let targetIdx = colMap[colIndex];
+            if(targetIdx !== -1) footerRow[targetIdx] = formatRupiah(sum); 
+        });
+
+        doc.text("Laporan Data Terpisah", 14, 15);
+        doc.autoTable({
+            startY: 20,
+            head: [pdfHeaders],
+            body: lastSelectedRows.map((row, rowIndex) => {
+                let formattedRow = [String(rowIndex + 1)]; 
+                row.forEach((cell, index) => {
+                    if (index === skipColIndex) return; // Lewati saat export PDF
+                    let val = cell;
+                    if (rupiahIndices.includes(index)) {
+                        val = formatRupiah(cell);
+                    }
+                    formattedRow.push(String(val || ''));
+                });
+                return formattedRow;
+            }),
+            foot: [footerRow], 
+            theme: 'grid',
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [33, 115, 70] },
+            footStyles: { fillColor: [230, 240, 235], textColor: [33, 33, 33], fontStyle: 'bold' },
+            columnStyles: rupiahIndices.reduce((acc, curr) => {
+                let targetIdx = colMap[curr];
+                if(targetIdx !== -1) acc[targetIdx] = { halign: 'right' }; 
+                return acc;
+            }, { 0: { halign: 'center', cellWidth: 10 } }) 
+        });
+        doc.save("Hasil_Data_Terpisah.pdf");
+    }
+
+    function copyToClipboard() {
+        if (lastSelectedRows.length === 0) return;
+        
+        let headerTexts = ["No."];
+        lastSelectedHeaders.forEach((h, index) => {
+             if (index !== skipColIndex) headerTexts.push(h); // Abaikan No asli
+        });
+        let textToCopy = headerTexts.join('\t') + '\n';
+        
+        lastSelectedRows.forEach((row, rowIndex) => {
+            let rowTexts = [rowIndex + 1];
+            row.forEach((cell, index) => {
+                 if (index !== skipColIndex) rowTexts.push(cell); // Abaikan Data No asli
+            });
+            textToCopy += rowTexts.join('\t') + '\n';
+        });
+
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            alert("✅ Data berhasil disalin! Silakan Paste (Ctrl+V) di Excel atau Google Sheets.");
+        }).catch(err => {
+            alert("Gagal menyalin data: " + err);
+        });
+    }
+</script>
+
+</body>
+</html>
